@@ -1,0 +1,98 @@
+/* Copyright (C) 2025 Alif Semiconductor - All Rights Reserved.
+ * Use, distribution and modification of this code is permitted under the
+ * terms stated in the Alif Semiconductor Software License Agreement
+ *
+ * You should have received a copy of the Alif Semiconductor Software
+ * License Agreement with this file. If not, please write to:
+ * contact@alifsemi.com, or visit: https://alifsemi.com/license
+ *
+ */
+
+#include <dt-bindings/pinctrl/balletto-pinctrl.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/timer/alif_utimer.h>
+#include <dt-bindings/pwm/pwm.h>
+
+/ {
+	aliases {
+		/delete-property/ sw0;
+
+		test-pwm1 = &mypwm4;
+		test-pwm2 = &mypwm3;
+	};
+
+	zephyr,user {
+		/* Array values: <device, channel, period, flags> */
+		pwms = <&mypwm4 1 PWM_MSEC(1000) PWM_POLARITY_NORMAL>,
+			<&mypwm3 1 PWM_MSEC(1000) PWM_POLARITY_NORMAL>;
+		pwm-names = "alpha", "beta";
+	};
+
+	/delete-node/ buttons;
+};
+
+&utimer0 {
+	mypwm1: pwm1 {
+	   	compatible = "alif,pwm";
+	   	#pwm-cells = < 0x3 >;
+	   	status = "okay";
+	   	pinctrl-0 = < &pinctrl_ut0 >;
+	   	pinctrl-names = "default";
+	};
+	counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+	status = "okay";
+};
+
+&utimer1 {
+	mypwm2: pwm2 {
+		compatible = "alif,pwm";
+		#pwm-cells = < 0x3 >;
+		status = "okay";
+	   	pinctrl-0 = < &pinctrl_ut1 >;
+	   	pinctrl-names = "default";
+	};
+	counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+	status = "okay";
+};
+
+&utimer2 {
+	mypwm3: pwm3 {
+		compatible = "alif,pwm";
+		#pwm-cells = < 0x3 >;
+		status = "okay";
+	   	pinctrl-0 = < &pinctrl_led0_g >;
+	   	pinctrl-names = "default";
+	};
+	counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+	status = "okay";
+};
+
+&utimer3 {
+	mypwm4: pwm4 {
+		compatible = "alif,pwm";
+		#pwm-cells = < 0x3 >;
+		status = "okay";
+	   	pinctrl-0 = < &pinctrl_led0_r >;
+	   	pinctrl-names = "default";
+	};
+	counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+	status = "okay";
+};
+
+&pinctrl {
+	pinctrl_led0_r: pinctrl_utimer3 {
+		group0 {
+			/* LED0_R */
+			pinmux = < PIN_P4_7__UT3_T1_A >;
+			read_enable = < 0x0 >;
+		};
+	};
+
+	pinctrl_led0_g: pinctrl_utimer2 {
+		group0 {
+			/* LED0_G */
+			pinmux = < PIN_P4_5__UT2_T1_A >;
+			read_enable = < 0x0 >;
+		};
+	};
+};
