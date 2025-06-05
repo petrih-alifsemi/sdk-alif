@@ -54,6 +54,10 @@ config INPUT_VOLUME_LEVEL
 	default 33
 	range 10 100
 
+config POWER_CONFIGURATION
+	bool "Power configuration"
+	default n
+
 menu "Logging"
 
 module = MAIN

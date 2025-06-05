@@ -32,12 +32,50 @@
 /* TODO: check MIC DMA for some weird error when used multiple times */
 #define MIC_DMA_ENABLED 0
 
+#define HW_CORE_CLOCK 120
+
 / {
 	aliases {
 		audio-codec = &wm8904;
-		i2s-input = &i2s0;
-		i2s-mic = &i2s2;
+		i2s-input = &i2s2;
+		/*i2s-mic = &i2s2;*/
+
+		led0 = &red_led;
+		led1 = &green_led;
 	};
+
+	chosen {
+		/delete-property/ zephyr,console;
+		/delete-property/ zephyr,shell-uart;
+		/delete-property/ zephyr,uart-mcumgr;
+	};
+
+	leds {
+		green_led: led_0 {
+			gpios = < &gpio4 5 GPIO_ACTIVE_HIGH >;
+			label = "LED_G";
+		};
+		red_led: led_1 {
+			gpios = < &gpio4 7 GPIO_ACTIVE_HIGH >;
+			label = "LED_R";
+		};
+	};
+};
+
+&uart_hci {
+#if HW_CORE_CLOCK == 120
+	clock-frequency = < 120000000 >;
+	dlf = < 0x8 >;
+#elif HW_CORE_CLOCK == 80
+	clock-frequency = < 80000000 >;
+	dlf = < 0xB >;
+#elif HW_CORE_CLOCK == 60
+	clock-frequency = < 60000000 >;
+	dlf = < 0x4 >;
+#else
+	clock-frequency = < 160000000 >;
+	dlf = < 0x5 >;
+#endif
 };
 
 &dma2 {
@@ -54,12 +92,12 @@
 
 &i2c1 {
 	clock-frequency = <I2C_BITRATE_STANDARD>;
-	status = "okay";
+	status = "disabled";
 
 	wm8904: wm8904@1a {
 		compatible = "cirrus,wm8904";
 		reg = <0x1a>;
-		status = "okay";
+		status = "disabled";
 	};
 };
 
@@ -70,7 +108,7 @@
 	interrupts = <I2S0_IRQ_NUM I2S0_IRQ_PRIO>;
 	bit-depth = <16>;
 	sample-rate = <48000>;
-	status = "okay";
+	status = "disabled";
 #if AUDIO_DMA_ENABLED
 	dmas = <&dma2 I2S0_DMA_RX_CH I2S0_DMA_RX_REQ>,
 	       <&dma2 I2S0_DMA_TX_CH I2S0_DMA_TX_REQ>;
@@ -125,3 +163,41 @@
 &uart_ahi {
 	status = "disabled";
 };
+
+
+&uart2 {
+	status = "disabled";
+};
+
+
+&utimer2 {
+	status = "disabled";
+	pwm2: pwm {
+		status = "disabled";
+	};
+};
+&cdc200 {
+	status = "disabled";
+};
+&dphy {
+	status = "disabled";
+};
+&adc0 {
+	status = "disabled";
+};
+&ethosu0 {
+	status = "disabled";
+};
+&ieee802154 {
+	status = "disabled";
+};
+
+
+/*
+&crc {
+	status = "disabled";
+};
+&rng {
+	status = "disabled";
+};
+*/

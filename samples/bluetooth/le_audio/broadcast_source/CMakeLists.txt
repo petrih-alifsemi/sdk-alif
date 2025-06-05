@@ -15,4 +15,5 @@ target_sources(app PRIVATE
     src/broadcast_source.c
     src/audio_datapath.c
     src/mic_source.c
+    src/power_config.c
 )

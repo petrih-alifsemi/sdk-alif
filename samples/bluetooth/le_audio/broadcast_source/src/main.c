@@ -16,14 +16,17 @@
 #include "gap_le.h"
 #include "broadcast_source.h"
 #include "audio_datapath.h"
+#include "power_config.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
 
 #define MIC_ENABLED (DT_NODE_EXISTS(DT_ALIAS(i2s_mic)) && DT_NODE_EXISTS(DT_ALIAS(sw0)))
 
+static const struct gpio_dt_spec led_on = GPIO_DT_SPEC_GET_OR(DT_ALIAS(led1), gpios, {0});
+
 #if MIC_ENABLED
 static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(DT_ALIAS(sw0), gpios, {0});
-static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET_OR(DT_ALIAS(led0), gpios, {0});
+static const struct gpio_dt_spec led_mic = GPIO_DT_SPEC_GET_OR(DT_ALIAS(led0), gpios, {0});
 
 #if CONFIG_I2S_SYNC_BUFFER_FORMAT_SEQUENTIAL
 #error "Sequential buffer format is not supported"
@@ -108,6 +111,7 @@ static void on_gapm_process_complete(uint32_t metainfo, uint16_t status)
 	if (ret != 0) {
 		LOG_ERR("Failed to start broadcast source with error %d", ret);
 	}
+	gpio_pin_set_dt(&led_on, ret == 0);
 }
 
 #if MIC_ENABLED
@@ -118,10 +122,10 @@ static void on_gapm_process_complete(uint32_t metainfo, uint16_t status)
 
 static void set_led(bool const state)
 {
-	if (!led.port) {
+	if (!led_mic.port) {
 		return;
 	}
-	gpio_pin_set_dt(&led, state);
+	gpio_pin_set_dt(&led_mic, state);
 }
 
 static bool get_button_state(void)
@@ -158,14 +162,20 @@ static void debounce_expired(struct k_work *work)
 
 	if (button_state) {
 		/* pressed... */
+#if button_set_power
+		power_config_set_wrapper();
+#else
 		(void)k_work_cancel_delayable(&stop_ptt_work);
 		audio_datapath_mic_control(true);
 		set_led(true);
+#endif
 		return;
 	}
 
+#if !button_set_power
 	/* Delay shutdown a bit to avoid weird behaviors */
 	k_work_reschedule(&stop_ptt_work, K_MSEC(PTT_MINIMUM_TIME_MS));
+#endif
 }
 
 static K_WORK_DELAYABLE_DEFINE(debounce_work, debounce_expired);
@@ -210,12 +220,12 @@ static int configure_button(void)
 
 static int configure_led(void)
 {
-	if (!gpio_is_ready_dt(&led)) {
+	if (!gpio_is_ready_dt(&led_mic)) {
 		return 0;
 	}
 
-	if (gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE)) {
-		LOG_ERR("led configure failed");
+	if (gpio_pin_configure_dt(&led_mic, GPIO_OUTPUT_ACTIVE)) {
+		LOG_ERR("led_mic configure failed");
 		return -1;
 	}
 
@@ -229,6 +239,20 @@ static int configure_led(void)
 
 int main(void)
 {
+	power_config_set_default_wrapper();
+	//power_config_get_and_print_wrapper();
+
+	if (!gpio_is_ready_dt(&led_on)) {
+		return 0;
+	}
+
+	if (gpio_pin_configure_dt(&led_on, GPIO_OUTPUT_ACTIVE)) {
+		LOG_ERR("led_on configure failed");
+		return -1;
+	}
+
+	gpio_pin_set_dt(&led_on, false);
+
 	if (configure_button()) {
 		return -1;
 	}
@@ -245,6 +269,13 @@ int main(void)
 	}
 
 	LOG_DBG("BLE enabled");
+
+#if !button_set_power
+	/* Power config can be done after BLE wakeup (SE is not needed anymore) */
+	if (power_config_set_wrapper()) {
+		return -1;
+	}
+#endif
 
 	uint16_t err = gapm_configure(0, &gapm_cfg, &gapm_cbs, on_gapm_process_complete);
 

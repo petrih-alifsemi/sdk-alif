@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 #define CODEC_NODE   DT_ALIAS(audio_codec)
 
 const struct device *i2s_dev = DEVICE_DT_GET(I2S_NODE);
-const struct device *codec_dev = DEVICE_DT_GET(CODEC_NODE);
+const struct device *codec_dev = DEVICE_DT_GET_OR_NULL(CODEC_NODE);
 const struct device *i2s_mic_dev = DEVICE_DT_GET_OR_NULL(I2S_MIC_NODE);
 
 /* Audio datapath handles */
@@ -50,6 +50,11 @@ void on_timing_debug_info_ready(struct presentation_comp_debug_data *dbg_data)
 
 static int configure_codec(const uint32_t sampling_rate_hz)
 {
+	if (!codec_dev) {
+		LOG_DBG("Codec device is not ready");
+		return 0;
+	}
+
 	int ret;
 	/* clang-format off */
 	struct audio_codec_cfg codec_cfg = {
@@ -244,7 +249,7 @@ int audio_datapath_init(void)
 		LOG_ERR("I2S device is not ready");
 		return -ENODEV;
 	}
-	if (!device_is_ready(codec_dev)) {
+	if (codec_dev && !device_is_ready(codec_dev)) {
 		LOG_ERR("Audio codec device is not ready");
 		return -ENODEV;
 	}
