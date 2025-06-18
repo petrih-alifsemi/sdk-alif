@@ -1,0 +1,72 @@
+/* Copyright (C) 2025 Alif Semiconductor - All Rights Reserved.
+ * Use, distribution and modification of this code is permitted under the
+ * terms stated in the Alif Semiconductor Software License Agreement
+ *
+ * You should have received a copy of the Alif Semiconductor Software
+ * License Agreement with this file. If not, please write to:
+ * contact@alifsemi.com, or visit: https://alifsemi.com/license
+ *
+ */
+
+#include <dt-bindings/pinctrl/balletto-pinctrl.h>
+#include <dt-bindings/gpio/gpio.h>
+
+#define UART_DMA_RX_CH  0
+#define UART_DMA_RX_REQ 10
+#define UART_DMA_TX_CH  1
+#define UART_DMA_TX_REQ 18
+
+/ {
+	aliases {
+		/delete-property/ sw0;
+
+		test-uart = &uart2;
+	};
+
+	chosen {
+		/delete-property/ zephyr,console;
+		/delete-property/ zephyr,shell-uart;
+		/delete-property/ zephyr,uart-mcumgr;
+	};
+
+	/delete-node/ buttons;
+};
+
+&dma2 {
+	status = "okay";
+};
+/*
+&uart0 {
+	status = "okay";
+	dmas = <&dma2 UART_DMA_RX_CH UART_DMA_RX_REQ>,
+	       <&dma2 UART_DMA_TX_CH UART_DMA_TX_REQ>;
+	dma-names = "rx", "tx";
+};
+
+&pinctrl_uart0 {
+	group0 {
+		pinmux = <PIN_P8_0__UART0_RX_C>,
+			 <PIN_P8_1__UART0_TX_C>;
+	};
+};
+*/
+
+&uart2 {
+	status = "okay";
+	dmas = <&dma2 UART_DMA_RX_CH UART_DMA_RX_REQ>,
+	       <&dma2 UART_DMA_TX_CH UART_DMA_TX_REQ>;
+	dma-names = "rx", "tx";
+};
+
+/* Disable unnecessary nodes */
+&uart_ahi {
+	status = "disabled";
+};
+
+&i2s1 {
+	status = "disabled";
+};
+
+&i2s2 {
+	status = "disabled";
+};
