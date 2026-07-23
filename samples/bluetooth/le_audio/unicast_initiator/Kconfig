@@ -92,6 +92,8 @@ source "subsys/logging/Kconfig.template.log_config"
 
 endmenu # "Logging"
 
+rsource "test_shell/Kconfig"
+
 endmenu # "Alif Bluetooth LE Audio Unicast Initiator"
 
 source "Kconfig.zephyr"

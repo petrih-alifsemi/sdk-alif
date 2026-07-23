@@ -655,9 +655,10 @@ int main(void)
 	if (unicast_acceptor_adv_start(APP_CON_ADDR)) {
 		return -1;
 	}
-
+#if CONFIG_PM
 	power_mgr_log_flush();
 	power_mgr_allow_sleep();
+#endif
 
 	k_sleep(K_FOREVER);
 

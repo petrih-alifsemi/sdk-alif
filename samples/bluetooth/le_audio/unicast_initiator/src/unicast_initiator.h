@@ -48,6 +48,15 @@ int unicast_setup_streams(uint8_t con_lid);
 int unicast_enable_streams(uint8_t con_lid);
 
 /**
+ * @brief Disable the streams for the LE audio unicast initiator
+ *
+ * @param con_lid Connection index
+ *
+ * @return 0 on success
+ */
+int unicast_disable_streams(uint8_t con_lid);
+
+/**
  * @brief Volume up all peripherals
  *
  * @return 0 on success

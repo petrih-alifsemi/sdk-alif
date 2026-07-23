@@ -367,6 +367,33 @@ static void enable_streaming(struct k_work *const p_job)
 	}
 }
 
+static void disable_streaming(struct k_work *const p_job)
+{
+	struct unicast_client_ase *const p_ase =
+		CONTAINER_OF(p_job, struct unicast_client_ase, work);
+
+	uint16_t err;
+	uint_fast8_t const mask = p_ase->state_bitmask;
+
+	if (GAF_INVALID_LID == p_ase->ase_lid || GAF_INVALID_LID == p_ase->cis_id ||
+	    !(mask & ASE_STATE_ENABLED)) {
+		return;
+	}
+
+	LOG_INF("ASE %u disabling...", p_ase->ase_lid);
+
+	alif_ble_mutex_lock(K_FOREVER);
+	err = bap_uc_cli_release(p_ase->ase_lid);
+	alif_ble_mutex_unlock();
+	if (err != GAF_ERR_NO_ERROR) {
+		LOG_ERR("Failed to release ASE %u! error %u", p_ase->ase_lid, err);
+		return;
+	}
+
+	// TODO: move to proper place
+	p_ase->work.handler = enable_streaming;
+}
+
 static void enable_streaming_all_ase(struct unicast_peer *p_unicast_env)
 {
 	k_sem_reset(&bap_complete_sem);
@@ -384,41 +411,26 @@ static void enable_streaming_all_ase(struct unicast_peer *p_unicast_env)
 		if (!p_ase->work.handler) {
 			continue;
 		}
+		p_ase->work.handler = enable_streaming;
 		k_work_submit_to_queue(&worker_queue, &p_ase->work);
 	}
 }
 
-/* TODO: Handle graceful shutdown of the streaming */
-#if STREAM_DISABLE_IMPL
-static void disable_streaming(struct k_work *const p_job)
+static void disable_streaming_all_ase(struct unicast_peer *p_unicast_env)
 {
-	uint16_t err;
+	k_sem_reset(&bap_complete_sem);
 
-	for (size_t iter = 0; iter < ARRAY_SIZE(p_unicast_env->ase); iter++) {
+	for (size_t iter = 0; iter < ARRAY_SIZE(p_unicast_env->ase); iter++)
+	{
 		struct unicast_client_ase *const p_ase = &p_unicast_env->ase[iter];
-		uint_fast8_t const mask = p_ase->state_bitmask;
 
-		if (GAF_INVALID_LID == p_ase->ase_lid || GAF_INVALID_LID == p_ase->cis_id ||
-		    !(mask & ASE_STATE_ENABLED)) {
+		if (!p_ase->work.handler) {
 			continue;
 		}
-
-		LOG_INF("ASE %u disabling...", p_ase->ase_lid);
-		err = bap_uc_cli_disable(p_ase->ase_lid);
-		if (err != GAF_ERR_NO_ERROR) {
-			LOG_ERR("Failed to disable ASE %u! error %u", p_ase->ase_lid, err);
-			continue;
-		}
-		wait_bap_complete();
-		p_ase->state_bitmask = mask & ~(ASE_STATE_STREAMING | ASE_STATE_ENABLED);
-
-		/* TODO: just stop...??? */
-		/* audio_datapath_cleanup_source(); */
+		p_ase->work.handler = disable_streaming;
+		k_work_submit_to_queue(&worker_queue, &p_ase->work);
 	}
 }
-
-static K_WORK_DEFINE(disable_job, disable_streaming);
-#endif
 
 static void configure_qos(struct unicast_peer *p_unicast_env)
 {
@@ -434,6 +446,13 @@ static void configure_qos(struct unicast_peer *p_unicast_env)
 		if (GAF_INVALID_LID == p_ase->ase_lid || GAF_INVALID_LID == p_ase->cis_id ||
 		    !(p_ase->state_bitmask & ASE_STATE_CODEC_CONFIGURED)) {
 			LOG_INF("Skip QoS config: %u", iter);
+			continue;
+		}
+
+		if (p_ase->state_bitmask & ASE_STATE_QOS_CONFIGURED) {
+			LOG_INF("QoS already configured for ASE %u, CIS %u", p_ase->ase_lid,
+				p_ase->cis_id);
+			p_ase->work.handler = enable_streaming;
 			continue;
 		}
 
@@ -761,6 +780,9 @@ static void on_bap_uc_cli_cmp_evt(uint8_t const cmd_type, uint16_t const status,
 		break;
 	}
 	case BAP_UC_CLI_CMD_TYPE_DISABLE: {
+		if (p_ase) {
+			p_ase->state_bitmask &= ~ASE_STATE_ENABLED;
+		}
 		break;
 	}
 	case BAP_UC_CLI_CMD_TYPE_RELEASE: {
@@ -965,7 +987,8 @@ static void on_bap_uc_cli_state_empty(uint8_t const con_lid, uint8_t const ase_i
 	switch (state) {
 	case BAP_UC_ASE_STATE_IDLE: {
 		/* Initialize ASE state */
-		p_ase->ase_instance_idx = ase_instance_idx;
+		if (ase_instance_idx != GAF_INVALID_LID)
+			p_ase->ase_instance_idx = ase_instance_idx;
 		p_ase->ase_lid =
 			(con_lid == GAP_INVALID_CONIDX && ase_instance_idx == GAF_INVALID_LID)
 				? GAF_INVALID_LID
@@ -973,8 +996,6 @@ static void on_bap_uc_cli_state_empty(uint8_t const con_lid, uint8_t const ase_i
 		p_ase->cis_id = GAF_INVALID_LID;
 		p_ase->stream_lid = GAF_INVALID_LID;
 		p_ase->state_bitmask = ASE_STATE_ZERO;
-
-		LOG_DBG("ASE IDLE: %u", p_ase->ase_lid);
 		break;
 	}
 	case BAP_UC_ASE_STATE_CODEC_CONFIGURED: {
@@ -1421,6 +1442,40 @@ int init_volume_control_service(void)
 
 /* ---------------------------------------------------------------------------------------- */
 
+int configure_bap_client(void)
+{
+	struct bap_uc_cli_cfg bap_cli_cfg = {
+		/* Configuration bit field. @ref enum bap_uc_cli_cfg_bf */
+		.cfg_bf = BAP_UC_CLI_CFG_RELIABLE_WR_BIT,
+		/* Number of ASE configurations that can be maintained
+		 * Shall be at larger than 0
+		 */
+		.nb_ases_cfg = ARRAY_SIZE(unicast_env.peers) * ARRAY_SIZE(unicast_env.peers[0].ase),
+		/* Preferred MTU
+		 * Values from 0 to 63 are equivalent to 64
+		 */
+		.pref_mtu = GAP_LE_MAX_OCTETS,
+		/* Timeout duration in seconds for reception of notification for ASE Control Point
+		 * characteristic and for
+		 * some notifications of ASE characteristic
+		 * From 1s to 5s, 0 means 1s
+		 */
+		.timeout_s = 3,
+	};
+	const uint16_t err = bap_uc_cli_configure(&bap_cli_cbs, &bap_cli_cfg);
+
+	if (err == GAF_ERR_COMMAND_DISALLOWED) {
+		LOG_DBG("BAP client already configured");
+		return 0;
+	}
+	if (err != GAF_ERR_NO_ERROR) {
+		LOG_ERR("Error %u configuring BAP client", err);
+		return -1;
+	}
+	LOG_DBG("BAP client configured");
+	return 0;
+}
+
 int unicast_initiator_configure(void)
 {
 #if !UC_GROUP_PER_PEER
@@ -1446,32 +1501,11 @@ int unicast_initiator_configure(void)
 			   K_KERNEL_STACK_SIZEOF(worker_task_stack), WORKER_PRIORITY, NULL);
 	k_thread_name_set(&worker_queue.thread, "unicast_cli_workq");
 
-	struct bap_uc_cli_cfg bap_cli_cfg = {
-		/* Configuration bit field. @ref enum bap_uc_cli_cfg_bf */
-		.cfg_bf = BAP_UC_CLI_CFG_RELIABLE_WR_BIT,
-		/* Number of ASE configurations that can be maintained
-		 * Shall be at larger than 0
-		 */
-		.nb_ases_cfg = ARRAY_SIZE(unicast_env.peers) * ARRAY_SIZE(unicast_env.peers[0].ase),
-		/* Preferred MTU
-		 * Values from 0 to 63 are equivalent to 64
-		 */
-		.pref_mtu = GAP_LE_MAX_OCTETS,
-		/* Timeout duration in seconds for reception of notification for ASE Control Point
-		 * characteristic and for
-		 * some notifications of ASE characteristic
-		 * From 1s to 5s, 0 means 1s
-		 */
-		.timeout_s = 3,
-	};
 	uint16_t err;
 
-	err = bap_uc_cli_configure(&bap_cli_cbs, &bap_cli_cfg);
-	if (err != GAF_ERR_NO_ERROR) {
-		LOG_ERR("Error %u configuring BAP client", err);
+	if (configure_bap_client()) {
 		return -1;
 	}
-	LOG_DBG("BAP client configured");
 
 	struct bap_capa_cli_cfg capa_cli_cfg = {
 		.pref_mtu = 0,
@@ -1530,6 +1564,10 @@ int unicast_setup_streams(uint8_t const con_lid)
 		return -EINVAL;
 	}
 
+	if (configure_bap_client()) {
+		return -1;
+	}
+
 	if (configure_codec(p_unicast_env)) {
 		return -1;
 	}
@@ -1550,6 +1588,21 @@ int unicast_enable_streams(uint8_t const con_lid)
 	}
 
 	enable_streaming_all_ase(p_unicast_env);
+
+	return 0;
+}
+
+int unicast_disable_streams(uint8_t const con_lid)
+{
+	LOG_DBG("Disabling streams for connection:%u", con_lid);
+
+	struct unicast_peer *p_unicast_env = get_unicast_env_by_connection_index(con_lid);
+
+	if (!p_unicast_env) {
+		return -EINVAL;
+	}
+
+	disable_streaming_all_ase(p_unicast_env);
 
 	return 0;
 }

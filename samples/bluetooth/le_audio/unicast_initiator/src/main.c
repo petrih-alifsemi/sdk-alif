@@ -1008,6 +1008,25 @@ static void start_streaming(struct k_work *work)
 
 static K_WORK_DEFINE(start_streaming_work, start_streaming);
 
+static void stop_streaming(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	struct peer_data *p_peer;
+	sys_snode_t *node = NULL;
+
+	/* Disable streams */
+	SYS_SLIST_ITERATE_FROM_NODE(&connected_peers_contexts, node)
+	{
+		p_peer = (struct peer_data *)node;
+		if (p_peer && p_peer->conidx != GAP_INVALID_CONIDX) {
+			unicast_disable_streams(p_peer->conidx);
+		}
+	}
+}
+
+static K_WORK_DEFINE(stop_streaming_work, stop_streaming);
+
 static void connect_to_peers(struct k_work *work)
 {
 	ARG_UNUSED(work);
@@ -1035,9 +1054,11 @@ static void connect_to_peers(struct k_work *work)
 		}
 	}
 
+#if !CONFIG_ALIF_LE_AUDIO_TEST_SHELL
 	LOG_DBG("All peers connected, starting streaming...");
 
 	k_work_submit(&start_streaming_work);
+#endif
 }
 
 static K_WORK_DEFINE(connect_work, connect_to_peers);
@@ -1294,7 +1315,7 @@ void joystick_press(struct k_work *work)
 
 	unicast_scan_start(scanning_ready_callback);
 }
-#if !CONFIG_AUTO_START_SCAN
+#if !CONFIG_AUTO_START_SCAN || CONFIG_ALIF_LE_AUDIO_TEST_SHELL
 static K_WORK_DEFINE(joystick_press_work, joystick_press);
 #endif
 
@@ -1407,6 +1428,35 @@ static struct gpio_data joystick_conf[] = {
 	{.spec = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(button_down), gpios, {0}),
 	 .execute_func = &joystick_down_work},
 };
+
+/* ---------------------------------------------------------------------------------------- */
+
+int scan_start(void)
+{
+	k_work_submit(&joystick_press_work);
+	return 0;
+}
+
+int stream_start(void)
+{
+	if (!sys_slist_len(&connected_peers_contexts)) {
+		return -ENOEXEC;
+	}
+
+	k_work_submit(&start_streaming_work);
+	return 0;
+}
+
+int stream_stop(void)
+{
+	if (!sys_slist_len(&connected_peers_contexts)) {
+		return -ENOEXEC;
+	}
+
+	k_work_submit(&stop_streaming_work);
+
+	return 0;
+}
 
 /* ---------------------------------------------------------------------------------------- */
 

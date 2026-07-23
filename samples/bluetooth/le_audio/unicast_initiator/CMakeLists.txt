@@ -17,3 +17,4 @@ target_sources(app PRIVATE
     src/audio_datapath.c
     src/scan.c
 )
+target_sources_ifdef(CONFIG_ALIF_LE_AUDIO_TEST_SHELL app PRIVATE test_shell/test_shell.c)

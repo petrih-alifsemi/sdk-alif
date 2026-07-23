@@ -60,4 +60,8 @@ int peer_ready(uint32_t conidx);
  */
 int terminate_connection(uint32_t conidx);
 
+int scan_start(void);
+int stream_start(void);
+int stream_stop(void);
+
 #endif /* _MAIN_H */
