@@ -48,9 +48,21 @@ static const struct gpio_dt_spec debug_pin = GPIO_DT_SPEC_GET_OR(DEBUG_PIN_NODE,
 /**
  * As per the application requirements, it can remove the memory blocks which are not in use.
  */
+#if 0
 #define APP_RET_MEM_BLOCKS                                                                         \
 	SRAM4_1_MASK | SRAM4_2_MASK | SRAM4_3_MASK | SRAM4_4_MASK | SRAM5_1_MASK | SRAM5_2_MASK |  \
 		SRAM5_3_MASK | SRAM5_4_MASK | SRAM5_5_MASK
+#else
+#define RET_A1 SRAM4_1_MASK
+#define RET_A2 SRAM5_1_MASK
+#define RET_B  (SRAM4_2_MASK | SRAM5_2_MASK)
+#define RET_C  (SRAM4_3_MASK | SRAM5_3_MASK)
+#define RET_D  (SRAM4_4_MASK | SRAM5_4_MASK)
+#define RET_E  (SRAM5_5_MASK)
+
+#define APP_RET_MEM_BLOCKS  RET_A2 | RET_B
+#endif
+
 #define SERAM_MEMORY_BLOCKS_IN_USE SERAM_1_MASK | SERAM_2_MASK | SERAM_3_MASK | SERAM_4_MASK
 
 #define LPGPIO_NODE           DT_NODELABEL(lpgpio)
@@ -99,8 +111,8 @@ int n __attribute__((noinit));
 #define RTC_CONNECTED_WAKEUP_INTERVAL_MS (55 + (n++ % 50))
 #define SERVICE_INTERVAL_MS              1000
 #else
-#define ADV_INT_MIN_SLOTS                1000
-#define ADV_INT_MAX_SLOTS                1000
+#define ADV_INT_MIN_SLOTS                1600 //1000
+#define ADV_INT_MAX_SLOTS                1600 //1000
 #define CONN_INT_MIN_SLOTS               800
 #define CONN_INT_MAX_SLOTS               800
 #define RTC_WAKEUP_INTERVAL_MS           CONFIG_SLEEP_TIME_DISCONNECTED
