@@ -991,7 +991,7 @@ int main(void)
 
 	printk("BLE Sleep demo\n");
 
-	ret = set_off_profile(PM_STATE_MODE_STOP);
+	ret = set_off_profile(/*PM_STATE_MODE_STOP*/PM_STATE_MODE_STANDBY);
 	if (ret) {
 		LOG_ERR("off profile set failed. error: %d", ret);
 		return ret;
@@ -1081,6 +1081,17 @@ int main(void)
 			printk("w");
 			continue;
 		}
+
+#if CONFIG_WAIT_BEFORE_SLEEP_SECONDS && 1
+		app_disable_sleep();
+		for (int i = 0; i < CONFIG_WAIT_BEFORE_SLEEP_SECONDS; i++) {
+			k_sleep(K_MSEC(1000));
+			printk(".");
+		}
+		printk("\r\n");
+		k_sleep(K_MSEC(100));
+		app_allow_sleep();
+#endif
 
 		k_sleep(K_MSEC(RTC_CONNECTED_WAKEUP_INTERVAL_MS));
 
